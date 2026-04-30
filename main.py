@@ -25,10 +25,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Load Malayalam data
 with open("quran.json", "r", encoding="utf-8") as f:
     QURAN_DATA = json.load(f)
 
-BISMILLAH = QURAN_DATA["bismillah"]
 MALAYALAM = {}
 SURAH_NAMES = {}
 for surah in QURAN_DATA["surahs"]:
@@ -38,11 +38,19 @@ for surah in QURAN_DATA["surahs"]:
     for verse in surah["verses"]:
         MALAYALAM[num][verse["number"]] = verse["text"]
 
+# Load Arabic data
+with open("arabic.json", "r", encoding="utf-8") as f:
+    raw_arabic = json.load(f)
+
+ARABIC = {}
+for surah_key, verses in raw_arabic.items():
+    ARABIC[int(surah_key)] = {int(v): t for v, t in verses.items()}
+
 USER_PREFS = {}
 
 
 def get_pref(user_id: int) -> str:
-    return USER_PREFS.get(user_id, "malayalam")
+    return USER_PREFS.get(user_id, "both")
 
 
 def parse_query(text: str):
@@ -58,25 +66,38 @@ def parse_query(text: str):
         return None, None
 
 
-def format_verse(surah_num: int, verse_num: int) -> str:
+def format_verse(surah_num: int, verse_num: int, pref: str) -> str:
     surah_name = SURAH_NAMES.get(surah_num)
     if not surah_name:
         return "സൂറ കണ്ടെത്തിയില്ല. Surah not found."
+
     ml_text = MALAYALAM.get(surah_num, {}).get(verse_num)
-    if not ml_text:
+    ar_text = ARABIC.get(surah_num, {}).get(verse_num)
+
+    if not ml_text and not ar_text:
         return "ആയത്ത് കണ്ടെത്തിയില്ല. Verse not found."
-    return (
-        f"*അദ്ധ്യായം: {surah_num}. {surah_name}*\n"
-        f"*വചനം: {verse_num}*\n\n"
-        f"{ml_text}"
-    )
+
+    header = f"*സൂറത്ത്: {surah_num}. {surah_name}*\n*വചനം: {verse_num}*\n\n"
+
+    if pref == "arabic" and ar_text:
+        return header + ar_text
+    elif pref == "malayalam" and ml_text:
+        return header + ml_text
+    else:
+        # both
+        parts = []
+        if ar_text:
+            parts.append(ar_text)
+        if ml_text:
+            parts.append(ml_text)
+        return header + "\n\n".join(parts)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name
     await update.message.reply_text(
         f"അസ്സലാമു അലൈക്കും {name}!\n\n"
-        "ഖുർആൻ ആയത്തുകൾ മലയാളത്തിൽ വായിക്കാൻ "
+        "ഖുർആൻ ആയത്തുകൾ വായിക്കാൻ "
         "സൂറ നമ്പർ:ആയത്ത് നമ്പർ എന്ന് അയക്കൂ\n\n"
         "ഉദാഹരണം: 1:1 അല്ലെങ്കിൽ 2:255\n\n"
         "/help - സഹായം\n"
@@ -106,7 +127,7 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data="pref_arabic",
         )],
         [InlineKeyboardButton(
-            "രണ്ടും Both" + (" ✅" if current == "both" else ""),
+            "രണ്ടും / Both" + (" ✅" if current == "both" else ""),
             callback_data="pref_both",
         )],
     ]
@@ -127,9 +148,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     label_map = {
         "malayalam": "മലയാളം മാത്രം",
         "arabic": "അറബിക് മാത്രം",
-        "both": "രണ്ടും Both",
+        "both": "രണ്ടും / Both",
     }
-    chosen = pref_map.get(query.data, "malayalam")
+    chosen = pref_map.get(query.data, "both")
     USER_PREFS[query.from_user.id] = chosen
     await query.edit_message_text(
         f"തിരഞ്ഞെടുത്തു: {label_map[chosen]}\n\n"
@@ -138,6 +159,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     surah, verse = parse_query(update.message.text)
     if surah is None:
         await update.message.reply_text(
@@ -145,18 +167,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ഉദാഹരണം: 1:1 അല്ലെങ്കിൽ 2:255"
         )
         return
+    pref = get_pref(user_id)
     await update.message.reply_text(
-        format_verse(surah, verse), parse_mode="Markdown"
+        format_verse(surah, verse, pref), parse_mode="Markdown"
     )
 
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_text = update.inline_query.query.strip()
+    user_id = update.inline_query.from_user.id
     results = []
     if query_text:
         surah, verse = parse_query(query_text)
         if surah is not None:
-            response = format_verse(surah, verse)
+            pref = get_pref(user_id)
+            response = format_verse(surah, verse, pref)
             surah_name = SURAH_NAMES.get(surah, f"Surah {surah}")
             ml_text = MALAYALAM.get(surah, {}).get(verse, "")
             results.append(
