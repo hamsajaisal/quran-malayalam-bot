@@ -10,7 +10,7 @@ from telegram import (
     InlineKeyboardMarkup,
 )
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     MessageHandler,
     InlineQueryHandler,
@@ -61,37 +61,31 @@ def parse_query(text: str):
 def format_verse(surah_num: int, verse_num: int) -> str:
     surah_name = SURAH_NAMES.get(surah_num)
     if not surah_name:
-        return "❌ സൂറ കണ്ടെത്തിയില്ല. Surah not found."
+        return "സൂറ കണ്ടെത്തിയില്ല. Surah not found."
     ml_text = MALAYALAM.get(surah_num, {}).get(verse_num)
     if not ml_text:
-        return "❌ ആയത്ത് കണ്ടെത്തിയില്ല. Verse not found."
-    return f"📖 *{surah_name}* — {surah_num}:{verse_num}\n\n{ml_text}"
+        return "ആയത്ത് കണ്ടെത്തിയില്ല. Verse not found."
+    return f"*{surah_name}* {surah_num}:{verse_num}\n\n{ml_text}"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name
     await update.message.reply_text(
-        f"അസ്സലാമു അലൈക്കും {name}! 🌙\n\n"
-        "ഖുർആൻ ആയത്തുകൾ മലയാളത്തിൽ വായിക്കാൻ:\n\n"
-        "സൂറ നമ്പർ:ആയത്ത് നമ്പർ എന്ന് അയക്കൂ\n"
+        f"അസ്സലാമു അലൈക്കും {name}!\n\n"
+        "ഖുർആൻ ആയത്തുകൾ മലയാളത്തിൽ വായിക്കാൻ "
+        "സൂറ നമ്പർ:ആയത്ത് നമ്പർ എന്ന് അയക്കൂ\n\n"
         "ഉദാഹരണം: 1:1 അല്ലെങ്കിൽ 2:255\n\n"
-        "Commands:\n"
-        "/start — ആരംഭം\n"
-        "/help — സഹായം\n"
-        "/settings — ഭാഷ തിരഞ്ഞെടുക്കുക",
+        "/help - സഹായം\n"
+        "/settings - ഭാഷ തിരഞ്ഞെടുക്കുക",
         parse_mode="Markdown",
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📖 *ഖുർആൻ ബോട്ട് — സഹായം*\n\n"
-        "ആയത്ത് തിരയാൻ:\n"
-        "സൂറ:ആയത്ത് — ഉദാ: 1:1 അല്ലെങ്കിൽ 2:255\n\n"
-        "Inline mode:\n"
-        "@BotUsername എന്നിട്ട് ആയത്ത് നമ്പർ ടൈപ്പ് ചെയ്യൂ\n"
-        "ഉദാ: @BotUsername 2:255",
-        parse_mode="Markdown",
+        "ആയത്ത് തിരയാൻ സൂറ:ആയത്ത് അയക്കൂ\n"
+        "ഉദാ: 1:1 അല്ലെങ്കിൽ 2:255\n\n"
+        "Inline: @BotUsername 2:255"
     )
 
 
@@ -108,12 +102,12 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data="pref_arabic",
         )],
         [InlineKeyboardButton(
-            "രണ്ടും / Both" + (" ✅" if current == "both" else ""),
+            "രണ്ടും Both" + (" ✅" if current == "both" else ""),
             callback_data="pref_both",
         )],
     ]
     await update.message.reply_text(
-        "ഭാഷ തിരഞ്ഞെടുക്കുക / Choose Language:",
+        "ഭാഷ തിരഞ്ഞെടുക്കുക:",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -129,7 +123,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     label_map = {
         "malayalam": "മലയാളം മാത്രം",
         "arabic": "അറബിക് മാത്രം",
-        "both": "രണ്ടും / Both",
+        "both": "രണ്ടും Both",
     }
     chosen = pref_map.get(query.data, "malayalam")
     USER_PREFS[query.from_user.id] = chosen
@@ -164,7 +158,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             results.append(
                 InlineQueryResultArticle(
                     id=str(uuid.uuid4()),
-                    title=f"{surah_name} — {surah}:{verse}",
+                    title=f"{surah_name} {surah}:{verse}",
                     description=ml_text[:80],
                     input_message_content=InputTextMessageContent(
                         response, parse_mode="Markdown"
@@ -179,7 +173,7 @@ def main():
     if not token:
         raise ValueError("BOT_TOKEN environment variable is not set!")
 
-    app = ApplicationBuilder().token(token).build()
+    app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("settings", settings))
