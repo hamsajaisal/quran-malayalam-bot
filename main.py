@@ -65,7 +65,11 @@ def format_verse(surah_num: int, verse_num: int) -> str:
     ml_text = MALAYALAM.get(surah_num, {}).get(verse_num)
     if not ml_text:
         return "ആയത്ത് കണ്ടെത്തിയില്ല. Verse not found."
-    return f"*{surah_name}* {surah_num}:{verse_num}\n\n{ml_text}"
+    return (
+        f"*അദ്ധ്യായം: {surah_num}. {surah_name}*\n"
+        f"*വചനം: {verse_num}*\n\n"
+        f"{ml_text}"
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
