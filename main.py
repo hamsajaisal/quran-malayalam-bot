@@ -333,8 +333,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "സൂറ നമ്പർ:ആയത്ത് നമ്പർ എന്ന് അയക്കൂ\n\n"
         "ഉദാഹരണം: 1:1 അല്ലെങ്കിൽ 2:255\n\n"
         "/help - സഹായം\n"
-        "/settings - ഭാഷ തിരഞ്ഞെടുക്കുക\n"
-        "/qiraat - ഖിറാഅത്ത് മോഡ് (തുടർച്ചയായ വായന)",
+        "/settings - ഭാഷ & ഖാരിയെ (ഓഡിയോ) തിരഞ്ഞെടുക്കുക\n"
+        "/qiraat - ഖിറാഅത്ത് മോഡ് (ഓഡിയോ സഹിതം ഓതാൻ)",
         parse_mode="Markdown",
     )
 
@@ -346,7 +346,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "ഉദാ: 1:1 അല്ലെങ്കിൽ 2:255\n\n"
         "തുടർച്ചയായ വായനയ്ക്ക്:\n"
         "2:22-26 അല്ലെങ്കിൽ 23:24,25,26\n\n"
-        "ഖിറാഅത്ത് മോഡ്: /qiraat\n\n"
+        "ഖിറാഅത്ത് മോഡ്: /qiraat (ആയത്തുകൾ ഓതി കേൾക്കാനുള്ള ഓഡിയോ ബട്ടണുകൾ സഹിതം)\n"
+        "/settings - ഭാഷ തിരഞ്ഞെടുക്കാനും ഓതി കേൾക്കേണ്ട ഖാരിയെ (Reciter) മാറ്റാനും സഹായിക്കുന്നു\n\n"
         "Inline: @BotUsername 2:255"
     )
 
