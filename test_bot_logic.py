@@ -56,6 +56,15 @@ class TestQuranBotLogic(unittest.TestCase):
         pref = main.get_pref(12345)
         self.assertEqual(pref, "arabic")
 
+        # Get default qari
+        qari = main.get_qari(12345)
+        self.assertEqual(qari, "Alafasy_128kbps")
+
+        # Set qari to Sudais
+        main.set_qari(12345, "Abdurrahmaan_As-Sudais_192kbps")
+        qari = main.get_qari(12345)
+        self.assertEqual(qari, "Abdurrahmaan_As-Sudais_192kbps")
+
         # Update user info (UPSERT check)
         main.register_user(12345, "Test User Updated", "test_uname_new")
         conn = sqlite3.connect(main.DB_PATH)
@@ -139,29 +148,43 @@ class TestQuranBotLogic(unittest.TestCase):
         self.assertIn("Fatihah", text)
         self.assertIn("ആയത്തുകൾ: 1 - 5", text)
         
-        # Verify keyboard buttons (should only have Next since we are at start)
-        buttons = keyboard.inline_keyboard[0]
-        self.assertEqual(len(buttons), 1)
-        self.assertEqual(buttons[0].text, "അടുത്തത് (Next) ➡️")
-        self.assertEqual(buttons[0].callback_data, "qiraat_page_1_6")
+        # Verify keyboard buttons: Row 0 is Audio buttons, Row 1 is Navigation
+        audio_buttons = keyboard.inline_keyboard[0]
+        self.assertEqual(len(audio_buttons), 5)
+        self.assertEqual(audio_buttons[0].text, "🔊 1")
+        self.assertEqual(audio_buttons[0].callback_data, "qiraat_play_1_1")
+        
+        nav_buttons = keyboard.inline_keyboard[1]
+        self.assertEqual(len(nav_buttons), 1)
+        self.assertEqual(nav_buttons[0].text, "അടുത്തത് (Next) ➡️")
+        self.assertEqual(nav_buttons[0].callback_data, "qiraat_page_1_6")
 
         # Check middle page of Surah 2 (total 286 verses, page starting at 6)
         text, keyboard = main.get_qiraat_page(2, 6, "both")
-        buttons = keyboard.inline_keyboard[0]
+        audio_buttons = keyboard.inline_keyboard[0]
+        self.assertEqual(len(audio_buttons), 5)
+        self.assertEqual(audio_buttons[0].text, "🔊 6")
+        
+        nav_buttons = keyboard.inline_keyboard[1]
         # Should have Prev and Next
-        self.assertEqual(len(buttons), 2)
-        self.assertEqual(buttons[0].text, "⬅️ മുൻപത്തെ (Prev)")
-        self.assertEqual(buttons[0].callback_data, "qiraat_page_2_1")
-        self.assertEqual(buttons[1].text, "അടുത്തത് (Next) ➡️")
-        self.assertEqual(buttons[1].callback_data, "qiraat_page_2_11")
+        self.assertEqual(len(nav_buttons), 2)
+        self.assertEqual(nav_buttons[0].text, "⬅️ മുൻപത്തെ (Prev)")
+        self.assertEqual(nav_buttons[0].callback_data, "qiraat_page_2_1")
+        self.assertEqual(nav_buttons[1].text, "അടുത്തത് (Next) ➡️")
+        self.assertEqual(nav_buttons[1].callback_data, "qiraat_page_2_11")
 
         # Check last page of Surah 1 (7 verses, starting at 6)
         text, keyboard = main.get_qiraat_page(1, 6, "both")
-        buttons = keyboard.inline_keyboard[0]
+        audio_buttons = keyboard.inline_keyboard[0]
+        self.assertEqual(len(audio_buttons), 2) # Only verses 6 and 7
+        self.assertEqual(audio_buttons[0].text, "🔊 6")
+        self.assertEqual(audio_buttons[1].text, "🔊 7")
+        
+        nav_buttons = keyboard.inline_keyboard[1]
         # Should only have Prev
-        self.assertEqual(len(buttons), 1)
-        self.assertEqual(buttons[0].text, "⬅️ മുൻപത്തെ (Prev)")
-        self.assertEqual(buttons[0].callback_data, "qiraat_page_1_1")
+        self.assertEqual(len(nav_buttons), 1)
+        self.assertEqual(nav_buttons[0].text, "⬅️ മുൻപത്തെ (Prev)")
+        self.assertEqual(nav_buttons[0].callback_data, "qiraat_page_1_1")
 
 if __name__ == "__main__":
     unittest.main()

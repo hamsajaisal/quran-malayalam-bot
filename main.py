@@ -61,6 +61,11 @@ def init_db():
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # Migration: add qari column if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN qari TEXT DEFAULT 'Alafasy_128kbps'")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -109,6 +114,33 @@ def set_pref(user_id: int, pref: str):
         conn.close()
     except Exception as e:
         logger.error(f"Error setting preference: {e}")
+
+def get_qari(user_id: int) -> str:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT qari FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row and row[0]:
+            return row[0]
+    except Exception as e:
+        logger.error(f"Error getting qari: {e}")
+    return "Alafasy_128kbps"
+
+def set_qari(user_id: int, qari: str):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (user_id, qari)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET qari = excluded.qari
+        """, (user_id, qari))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error setting qari: {e}")
 
 def get_all_users() -> list[int]:
     try:
@@ -269,15 +301,26 @@ def get_qiraat_page(surah_num: int, start_verse: int, pref: str) -> tuple[str, I
     if len(text) > 4000:
         text = text[:3900] + "\n\n...(Truncated due to length)"
         
-    buttons = []
+    # Audio buttons row: 🔊 1 | 🔊 2 | ...
+    audio_buttons = []
+    for v in verse_nums:
+        audio_buttons.append(InlineKeyboardButton(f"🔊 {v}", callback_data=f"qiraat_play_{surah_num}_{v}"))
+
+    # Navigation buttons
+    nav_buttons = []
     if start_verse > 1:
         prev_start = max(1, start_verse - 5)
-        buttons.append(InlineKeyboardButton("⬅️ മുൻപത്തെ (Prev)", callback_data=f"qiraat_page_{surah_num}_{prev_start}"))
+        nav_buttons.append(InlineKeyboardButton("⬅️ മുൻപത്തെ (Prev)", callback_data=f"qiraat_page_{surah_num}_{prev_start}"))
     if end_verse < total_verses:
         next_start = end_verse + 1
-        buttons.append(InlineKeyboardButton("അടുത്തത് (Next) ➡️", callback_data=f"qiraat_page_{surah_num}_{next_start}"))
+        nav_buttons.append(InlineKeyboardButton("അടുത്തത് (Next) ➡️", callback_data=f"qiraat_page_{surah_num}_{next_start}"))
         
-    keyboard = [buttons] if buttons else []
+    keyboard = []
+    if audio_buttons:
+        keyboard.append(audio_buttons)
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+
     return text, InlineKeyboardMarkup(keyboard)
 
 
@@ -310,7 +353,35 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_interaction(update)
-    user_id = update.effective_user.id
+    keyboard = [
+        [InlineKeyboardButton("🌐 ഭാഷ തിരഞ്ഞെടുക്കുക (Choose Language)", callback_data="settings_lang")],
+        [InlineKeyboardButton("🎙️ ഖാരിയെ തിരഞ്ഞെടുക്കുക (Choose Reciter)", callback_data="settings_qari")],
+    ]
+    await update.message.reply_text(
+        "ക്രമീകരണങ്ങൾ തിരഞ്ഞെടുക്കുക / Settings:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def settings_main_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    register_interaction(update)
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("🌐 ഭാഷ തിരഞ്ഞെടുക്കുക (Choose Language)", callback_data="settings_lang")],
+        [InlineKeyboardButton("🎙️ ഖാരിയെ തിരഞ്ഞെടുക്കുക (Choose Reciter)", callback_data="settings_qari")],
+    ]
+    await query.edit_message_text(
+        "ക്രമീകരണങ്ങൾ തിരഞ്ഞെടുക്കുക / Settings:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def settings_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    register_interaction(update)
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
     current = get_pref(user_id)
     keyboard = [
         [InlineKeyboardButton(
@@ -325,9 +396,10 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "രണ്ടും / Both" + (" ✅" if current == "both" else ""),
             callback_data="pref_both",
         )],
+        [InlineKeyboardButton("⬅️ ബാക്ക് (Back)", callback_data="settings_main")],
     ]
-    await update.message.reply_text(
-        "ഭാഷ തിരഞ്ഞെടുക്കുക:",
+    await query.edit_message_text(
+        "ഭാഷ തിരഞ്ഞെടുക്കുക / Choose Language:",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -348,9 +420,60 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     chosen = pref_map.get(query.data, "both")
     set_pref(query.from_user.id, chosen)
+    keyboard = [[InlineKeyboardButton("⬅️ ബാക്ക് (Back)", callback_data="settings_lang")]]
     await query.edit_message_text(
         f"തിരഞ്ഞെടുത്തു: {label_map[chosen]}\n\n"
-        "ഇനി ആയത്ത് നമ്പർ അയക്കൂ. ഉദാ: 2:255"
+        "ഇനി ആയത്ത് നമ്പർ അയക്കൂ. ഉദാ: 2:255",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def settings_qari_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    register_interaction(update)
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    current = get_qari(user_id)
+    
+    qari_options = [
+        ("Mishary Rashid Alafasy", "Alafasy_128kbps"),
+        ("Abdurrahmaan As-Sudais", "Abdurrahmaan_As-Sudais_192kbps"),
+        ("Saad Al-Ghamdi", "Ghamadi_40kbps"),
+        ("Mahmoud Khalil Al-Husary", "Husary_128kbps"),
+    ]
+    
+    keyboard = []
+    for name, code in qari_options:
+        tick = " ✅" if current == code else ""
+        keyboard.append([InlineKeyboardButton(name + tick, callback_data=f"qari_{code}")])
+    
+    keyboard.append([InlineKeyboardButton("⬅️ ബാക്ക് (Back)", callback_data="settings_main")])
+    await query.edit_message_text(
+        "ഖാരിയെ തിരഞ്ഞെടുക്കുക / Choose Reciter:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def qari_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    register_interaction(update)
+    query = update.callback_query
+    await query.answer()
+    code = query.data.replace("qari_", "")
+    set_qari(query.from_user.id, code)
+    
+    qari_names = {
+        "Alafasy_128kbps": "Mishary Rashid Alafasy",
+        "Abdurrahmaan_As-Sudais_192kbps": "Abdurrahmaan As-Sudais",
+        "Ghamadi_40kbps": "Saad Al-Ghamdi",
+        "Husary_128kbps": "Mahmoud Khalil Al-Husary",
+    }
+    
+    name = qari_names.get(code, "Mishary Rashid Alafasy")
+    keyboard = [[InlineKeyboardButton("⬅️ ബാക്ക് (Back)", callback_data="settings_qari")]]
+    await query.edit_message_text(
+        f"ഖാരിയെ തിരഞ്ഞെടുത്തു: {name}\n\n"
+        "ഇനി ഖിറാഅത്ത് മോഡിൽ നിങ്ങൾക്ക് ഈ ഖാരിയുടെ ശബ്ദം കേൾക്കാം.",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -496,6 +619,54 @@ async def qiraat_page_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Error editing message: {e}")
 
 
+async def qiraat_play_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("ഓഡിയോ ലോഡ് ചെയ്യുന്നു... Loading audio...")
+    
+    parts = query.data.split("_")
+    if len(parts) != 4:
+        return
+    
+    try:
+        surah_num = int(parts[2])
+        verse_num = int(parts[3])
+    except ValueError:
+        return
+        
+    user_id = query.from_user.id
+    qari = get_qari(user_id)
+    
+    # Construct everyayah URL (3-digit zero padded format)
+    audio_url = f"https://www.everyayah.com/data/{qari}/{surah_num:03d}{verse_num:03d}.mp3"
+    
+    surah_name = SURAH_NAMES.get(surah_num, f"Surah {surah_num}")
+    
+    qari_names = {
+        "Alafasy_128kbps": "Mishary Rashid Alafasy",
+        "Abdurrahmaan_As-Sudais_192kbps": "Abdurrahmaan As-Sudais",
+        "Ghamadi_40kbps": "Saad Al-Ghamdi",
+        "Husary_128kbps": "Mahmoud Khalil Al-Husary",
+    }
+    qari_name = qari_names.get(qari, "Mishary Rashid Alafasy")
+    
+    caption = f"📖 സൂറത്ത് {surah_name} ({surah_num}:{verse_num})\n🎙️ {qari_name}"
+    
+    try:
+        await context.bot.send_audio(
+            chat_id=query.message.chat_id,
+            audio=audio_url,
+            caption=caption,
+            title=f"Verse {surah_num}:{verse_num}",
+            performer=surah_name
+        )
+    except Exception as e:
+        logger.error(f"Error sending audio: {e}")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="ക്ഷമിക്കണം, ഈ ആയത്തിന്റെ ഓഡിയോ ലഭ്യമല്ല. Audio not available."
+        )
+
+
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_interaction(update)
     user_id = update.effective_user.id
@@ -594,7 +765,12 @@ def main():
     app.add_handler(CommandHandler("backup", backup_command))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
     app.add_handler(CallbackQueryHandler(settings_callback, pattern="^pref_"))
+    app.add_handler(CallbackQueryHandler(settings_main_callback, pattern="^settings_main$"))
+    app.add_handler(CallbackQueryHandler(settings_lang_callback, pattern="^settings_lang$"))
+    app.add_handler(CallbackQueryHandler(settings_qari_callback, pattern="^settings_qari$"))
+    app.add_handler(CallbackQueryHandler(qari_callback, pattern="^qari_"))
     app.add_handler(CallbackQueryHandler(qiraat_page_callback, pattern="^qiraat_page_"))
+    app.add_handler(CallbackQueryHandler(qiraat_play_callback, pattern="^qiraat_play_"))
     app.add_handler(InlineQueryHandler(inline_query))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
