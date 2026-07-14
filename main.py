@@ -225,13 +225,14 @@ def parse_query(text: str):
     return surah_num, verses
 
 
-def format_verses(surah_num: int, verse_nums: list[int], pref: str) -> list[str]:
+def format_verses(surah_num: int, verse_nums: list[int], pref: str) -> list[tuple[str, list[int]]]:
     surah_name = SURAH_NAMES.get(surah_num)
     if not surah_name:
-        return ["സൂറ കണ്ടെത്തിയില്ല. Surah not found."]
+        return [("സൂറ കണ്ടെത്തിയില്ല. Surah not found.", [])]
 
     messages = []
     current_message = f"*സൂറത്ത്: {surah_num}. {surah_name}*\n\n"
+    current_verses = []
     
     for verse_num in verse_nums:
         ml_text = MALAYALAM.get(surah_num, {}).get(verse_num)
@@ -256,12 +257,14 @@ def format_verses(surah_num: int, verse_nums: list[int], pref: str) -> list[str]
         
         # Split message if it exceeds 4000 characters
         if len(current_message) + len(verse_str) > 4000:
-            messages.append(current_message.strip())
+            messages.append((current_message.strip(), current_verses))
             current_message = f"*സൂറത്ത്: {surah_num}. {surah_name} (തുടർച്ച...)*\n\n" + verse_str
+            current_verses = [verse_num]
         else:
             current_message += verse_str
+            current_verses.append(verse_num)
             
-    messages.append(current_message.strip())
+    messages.append((current_message.strip(), current_verses))
     return messages
 
 
@@ -533,8 +536,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     pref = get_pref(user_id)
     formatted_messages = format_verses(surah, verses, pref)
-    for msg in formatted_messages:
-        await update.message.reply_text(msg, parse_mode="Markdown")
+    for msg_text, msg_verses in formatted_messages:
+        keyboard = []
+        if msg_verses:
+            audio_buttons = []
+            for v in msg_verses:
+                if MALAYALAM.get(surah, {}).get(v) or ARABIC.get(surah, {}).get(v):
+                    audio_buttons.append(InlineKeyboardButton(f"🔊 {v}", callback_data=f"qiraat_play_{surah}_{v}"))
+            if audio_buttons:
+                for i in range(0, len(audio_buttons), 5):
+                    keyboard.append(audio_buttons[i:i+5])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+        await update.message.reply_text(
+            text=msg_text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
 
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -547,7 +565,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if surah is not None:
             pref = get_pref(user_id)
             formatted_list = format_verses(surah, verses, pref)
-            response = "\n\n".join(formatted_list)
+            response = "\n\n".join([item[0] for item in formatted_list])
             if len(response) > 4000:
                 response = response[:3900] + "\n\n...(Truncated due to Telegram limit)"
             
@@ -569,6 +587,24 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     verses_title = ",".join(map(str, verses))
             
+            # Create inline keyboard for inline query message
+            keyboard = []
+            all_verses = []
+            for item in formatted_list:
+                all_verses.extend(item[1])
+            # Limit inline query audio buttons to first 10 verses to avoid large keyboard
+            all_verses = all_verses[:10]
+            
+            audio_buttons = []
+            for v in all_verses:
+                if MALAYALAM.get(surah, {}).get(v) or ARABIC.get(surah, {}).get(v):
+                    audio_buttons.append(InlineKeyboardButton(f"🔊 {v}", callback_data=f"qiraat_play_{surah}_{v}"))
+            if audio_buttons:
+                for i in range(0, len(audio_buttons), 5):
+                    keyboard.append(audio_buttons[i:i+5])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+            
             results.append(
                 InlineQueryResultArticle(
                     id=str(uuid.uuid4()),
@@ -577,6 +613,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     input_message_content=InputTextMessageContent(
                         response, parse_mode="Markdown"
                     ),
+                    reply_markup=reply_markup,
                 )
             )
     await update.inline_query.answer(results, cache_time=30)
@@ -652,9 +689,12 @@ async def qiraat_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     
     caption = f"📖 സൂറത്ത് {surah_name} ({surah_num}:{verse_num})\n🎙️ {qari_name}"
     
+    # Fallback to query.from_user.id if message is None (triggered via inline query)
+    chat_id = query.message.chat_id if query.message else query.from_user.id
+    
     try:
         await context.bot.send_audio(
-            chat_id=query.message.chat_id,
+            chat_id=chat_id,
             audio=audio_url,
             caption=caption,
             title=f"Verse {surah_num}:{verse_num}",
@@ -663,7 +703,7 @@ async def qiraat_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Error sending audio: {e}")
         await context.bot.send_message(
-            chat_id=query.message.chat_id,
+            chat_id=chat_id,
             text="ക്ഷമിക്കണം, ഈ ആയത്തിന്റെ ഓഡിയോ ലഭ്യമല്ല. Audio not available."
         )
 

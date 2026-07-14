@@ -124,22 +124,28 @@ class TestQuranBotLogic(unittest.TestCase):
         # Format single verse (both)
         messages = main.format_verses(1, [1], "both")
         self.assertEqual(len(messages), 1)
-        self.assertIn("Fatihah", messages[0])
-        self.assertIn("ബിസ്മി", messages[0]) # Arabic/Malayalam text in Al-Fatihah 1:1
+        text, verses = messages[0]
+        self.assertIn("Fatihah", text)
+        self.assertIn("ബിസ്മി", text) # Arabic/Malayalam text in Al-Fatihah 1:1
+        self.assertEqual(verses, [1])
 
         # Format invalid verse
         messages = main.format_verses(1, [99], "both") # Fatihah has only 7 verses
-        self.assertIn("Verse not found", messages[0])
+        text, verses = messages[0]
+        self.assertIn("Verse not found", text)
+        self.assertEqual(verses, [99])
 
         # Format Malayalam only
         messages_ml = main.format_verses(1, [1], "malayalam")
         self.assertEqual(len(messages_ml), 1)
-        self.assertIn("പരമകാരുണികനും", messages_ml[0])
+        text, verses = messages_ml[0]
+        self.assertIn("പരമകാരുണികനും", text)
         
         # Format Arabic only
         messages_ar = main.format_verses(1, [1], "arabic")
         self.assertEqual(len(messages_ar), 1)
-        self.assertIn("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", messages_ar[0])
+        text, verses = messages_ar[0]
+        self.assertIn("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", text)
 
     def test_get_qiraat_page(self):
         # Check first page of Surah 1
