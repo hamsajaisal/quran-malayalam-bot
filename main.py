@@ -47,7 +47,12 @@ ARABIC = {}
 for surah_key, verses in raw_arabic.items():
     ARABIC[int(surah_key)] = {int(v): t for v, t in verses.items()}
 
-DB_PATH = "bot_data.db"
+DB_PATH = os.environ.get("DATABASE_PATH")
+if not DB_PATH:
+    if os.path.exists("/data") and os.path.isdir("/data"):
+        DB_PATH = "/data/bot_data.db"
+    else:
+        DB_PATH = "bot_data.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
