@@ -111,6 +111,41 @@ class TestQuranBotLogic(unittest.TestCase):
         self.assertEqual(len(verses), 30)
         self.assertEqual(verses[-1], 30)
 
+        # Flexible query formats (new tests)
+        # Space-separated single verse
+        s1, v1 = main.parse_query("2 23")
+        self.assertEqual(s1, 2)
+        self.assertEqual(v1, [23])
+
+        # Space-separated range
+        s2, v2 = main.parse_query("2 22-26")
+        self.assertEqual(s2, 2)
+        self.assertEqual(v2, [22, 23, 24, 25, 26])
+
+        # Hyphen-separated single verse
+        s3, v3 = main.parse_query("2-23")
+        self.assertEqual(s3, 2)
+        self.assertEqual(v3, [23])
+
+        # Hyphen-separated range
+        s4, v4 = main.parse_query("2-22-26")
+        self.assertEqual(s4, 2)
+        self.assertEqual(v4, [22, 23, 24, 25, 26])
+
+        # Underscore-separated query
+        s5, v5 = main.parse_query("2_23")
+        self.assertEqual(s5, 2)
+        self.assertEqual(v5, [23])
+
+        # Query with spaces around separator and range hyphens
+        s6, v6 = main.parse_query("2  -  22  -  26")
+        self.assertEqual(s6, 2)
+        self.assertEqual(v6, [22, 23, 24, 25, 26])
+
+        s7, v7 = main.parse_query("2  22  -  26")
+        self.assertEqual(s7, 2)
+        self.assertEqual(v7, [22, 23, 24, 25, 26])
+
         # Invalid formats
         self.assertTupleEqual(main.parse_query("invalid_query"), (None, None))
         self.assertTupleEqual(main.parse_query("2"), (None, None))

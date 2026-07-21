@@ -3,6 +3,7 @@ import json
 import logging
 import uuid
 import sqlite3
+import re
 from telegram import (
     Update,
     InlineQueryResultArticle,
@@ -176,14 +177,33 @@ USER_STATE = {}
 
 
 def parse_query(text: str):
-    text = text.strip().replace(" ", "")
-    if ":" not in text:
+    # Normalize input text
+    text = text.strip()
+    text = re.sub(r'\s*:\s*', ':', text)
+    text = re.sub(r'\s*-\s*', '-', text)
+    text = re.sub(r'\s*_\s*', '_', text)
+    text = re.sub(r'\s*,\s*', ',', text)
+    text = re.sub(r'\s+', ' ', text)
+
+    # Find the first separator among ':', ' ', '_', '-'
+    separators = [':', ' ', '_', '-']
+    first_sep = None
+    first_index = len(text)
+    
+    for sep in separators:
+        idx = text.find(sep)
+        if idx != -1 and idx < first_index:
+            first_index = idx
+            first_sep = sep
+
+    if first_sep is None:
         return None, None
-    parts = text.split(":")
-    if len(parts) != 2:
-        return None, None
+
+    chapter_str = text[:first_index]
+    verse_spec = text[first_index + 1:]
+
     try:
-        surah_num = int(parts[0])
+        surah_num = int(chapter_str)
     except ValueError:
         return None, None
 
