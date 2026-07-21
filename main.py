@@ -210,7 +210,7 @@ def parse_query(text: str):
     if surah_num < 1 or surah_num > 114:
         return None, None
 
-    verse_parts = parts[1].split(",")
+    verse_parts = verse_spec.split(",")
     verses = []
     
     for part in verse_parts:
